@@ -129,7 +129,8 @@ class TmuxSessionManager:
         pane = window.active_pane
         # Use a unique marker to capture only the file content
         marker = f"__MCP_EOF_{uuid.uuid4().hex[:8]}__"
-        cmd = f"cat {remote_path} && echo {marker}"
+        # Prefix with a space to avoid shell history (if HISTCONTROL=ignorespace is set)
+        cmd = f" cat {remote_path} && echo {marker}"
         
         pane.send_keys(cmd, enter=True)
         
@@ -182,7 +183,8 @@ class TmuxSessionManager:
         encoded_content = base64.b64encode(content.encode()).decode()
         
         redirect = "-a" if append else ""
-        cmd = f"echo '{encoded_content}' | base64 -d | tee {redirect} {remote_path} > /dev/null"
+        # Prefix with a space to avoid shell history
+        cmd = f" echo '{encoded_content}' | base64 -d | tee {redirect} {remote_path} > /dev/null"
         
         pane.send_keys(cmd, enter=True)
 
