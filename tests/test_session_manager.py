@@ -52,6 +52,27 @@ def test_open_ssh_naming(mock_tmux):
         args, kwargs = mock_session.new_window.call_args
         assert "admin@remote-host-" in kwargs["window_name"]
 
+def test_list_multiple_windows(mock_tmux):
+    mock_instance, mock_session = mock_tmux
+    manager = TmuxSessionManager()
+    
+    # Mock multiple windows
+    win1 = MagicMock()
+    win1.window_name = "user@host1-aaaa"
+    win2 = MagicMock()
+    win2.window_name = "user@host1-bbbb" # Same host, different ID
+    win3 = MagicMock()
+    win3.window_name = "admin@host2-cccc" # Different host
+    
+    mock_session.windows = [win1, win2, win3]
+    
+    sessions = manager.list_windows()
+    assert len(sessions) == 3
+    ids = [s["window_id"] for s in sessions]
+    assert "user@host1-aaaa" in ids
+    assert "user@host1-bbbb" in ids
+    assert "admin@host2-cccc" in ids
+
 def test_read_file_logic(mock_tmux):
     mock_instance, mock_session = mock_tmux
     manager = TmuxSessionManager()
