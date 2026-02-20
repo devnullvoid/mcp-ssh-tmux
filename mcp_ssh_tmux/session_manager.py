@@ -11,15 +11,18 @@ class TmuxSessionManager:
     def __init__(self, session_name: str = "mcp-ssh"):
         self.session_name = session_name
         self.server = libtmux.Server()
-        self.session = self._ensure_session()
+        self._session = None
         self.command_validator = CommandValidator()
 
-    def _ensure_session(self):
-        """Ensure the dedicated tmux session exists."""
+    @property
+    def session(self):
+        """Property that ensures the tmux session is alive and returns it."""
+        # Re-check server/session state
         session = self.server.sessions.get(session_name=self.session_name, default=None)
         if not session:
             session = self.server.new_session(session_name=self.session_name)
-        return session
+        self._session = session
+        return self._session
 
     def _resolve_connection(self, host: str) -> Dict[str, str]:
         """Resolve SSH connection parameters using ssh -G."""
@@ -62,8 +65,7 @@ class TmuxSessionManager:
         ssh_cmd = "ssh"
         if resolved_port and str(resolved_port) != "22":
             ssh_cmd += f" -p {resolved_port}"
-        if resolved_key and resolved_key != "~/.ssh/id_rsa": # Only add if not default or exists
-             # ssh -G usually returns the absolute path
+        if resolved_key and resolved_key != "~/.ssh/id_rsa":
              ssh_cmd += f" -i {resolved_key}"
         if resolved_user:
             ssh_cmd += f" {resolved_user}@{resolved_host}"
@@ -71,15 +73,17 @@ class TmuxSessionManager:
             ssh_cmd += f" {resolved_host}"
 
         # Create window and run command DIRECTLY
-        window = self.session.new_window(window_name=window_id, attach=False, window_shell=ssh_cmd)
+        # Use session property to ensure it exists
+        new_win = self.session.new_window(window_name=window_id, attach=False, window_shell=ssh_cmd)
         
         # Set remain-on-exit so we can see why a session died
-        window.set_option("remain-on-exit", "on")
+        new_win.set_option("remain-on-exit", "on")
 
         # Cleanup the default initial window if it's still there and empty
         # This ensures the session will actually close when all SSH windows are gone
         for w in self.session.windows:
-            if w.window_name in ["0", "bash"] and w.window_id != window.window_id:
+            # Check for common default names and ensure it's NOT our new window
+            if w.window_id != new_win.window_id and w.window_name in ["0", "bash", "fish"]:
                 try:
                     w.kill()
                 except:
@@ -118,7 +122,15 @@ class TmuxSessionManager:
             return f"Error: Window {window_id} not found."
         
         pane = window.active_pane
-        raw_text = "\n".join(pane.capture_pane())
+        # Capture standard view (last ~40 lines) to avoid overwhelming the LLM
+        # capture_pane returns a list of strings
+        raw_lines = pane.capture_pane()
+        
+        # Limit to last 40 lines if it's very long
+        if len(raw_lines) > 40:
+            raw_lines = raw_lines[-40:]
+            
+        raw_text = "\n".join(raw_lines)
         return self._strip_ansi(raw_text)
 
     def send_keys(self, window_id: str, keys: str):
@@ -141,9 +153,7 @@ class TmuxSessionManager:
             raise ValueError(f"Window {window_id} not found")
         
         pane = window.active_pane
-        # Use a unique marker to capture only the file content
         marker = f"__MCP_EOF_{uuid.uuid4().hex[:8]}__"
-        # Prefix with a space to avoid shell history (if HISTCONTROL=ignorespace is set)
         cmd = f" cat {remote_path} && echo {marker}"
         
         pane.send_keys(cmd, enter=True)
@@ -153,34 +163,18 @@ class TmuxSessionManager:
         max_attempts = 10
         for _ in range(max_attempts):
             time.sleep(0.5)
-            snapshot = self.get_snapshot(window_id)
+            # Use raw capture here to avoid 40-line limit
+            snapshot = "\n".join(pane.capture_pane())
             if marker in snapshot:
-                # Find the marker that was part of our command
-                # Pattern: user@host:~$ cat file && echo EOF_MARKER
-                # Then: file content
-                # Then: EOF_MARKER
-                
-                # Split by marker - we expect at least 3 parts if both are present
-                # 1. Before command (empty or prompt)
-                # 2. Between echo marker and second marker (the content)
-                # 3. After second marker (empty or prompt)
-                
                 parts = snapshot.split(marker)
                 if len(parts) >= 3:
-                    # parts[0] is everything before first marker (prompt + cat cmd)
-                    # parts[1] is everything between first and second marker (the content)
-                    # We might have some trailing characters from the first line (newline after echo marker)
-                    content = parts[1].strip()
-                    return content
+                    return self._strip_ansi(parts[1]).strip()
                 elif len(parts) == 2:
-                    # Maybe only one marker is visible? Let's be cautious.
-                    # If marker is at the end, the content is between the command and the marker.
                     lines = snapshot.splitlines()
                     for i, line in enumerate(lines):
                         if marker in line:
-                            # If it's the second occurrence (not the echo command)
-                            if i > 0 and marker not in lines[0]:
-                                return "\n".join(lines[:i]).strip()
+                            if i > 0:
+                                return self._strip_ansi("\n".join(lines[:i])).strip()
         
         return ""
 
@@ -191,26 +185,25 @@ class TmuxSessionManager:
             raise ValueError(f"Window {window_id} not found")
         
         pane = window.active_pane
-        
-        # Use base64 to avoid shell escaping issues
         import base64
         encoded_content = base64.b64encode(content.encode()).decode()
         
         redirect = "-a" if append else ""
-        # Prefix with a space to avoid shell history
         cmd = f" echo '{encoded_content}' | base64 -d | tee {redirect} {remote_path} > /dev/null"
         
         pane.send_keys(cmd, enter=True)
 
     def close_window(self, window_id: str):
         """Close the tmux window and kill session if it's the last one."""
-        window = self.session.windows.get(window_name=window_id, default=None)
+        # Use session property to ensure it's still there
+        session = self.session
+        window = session.windows.get(window_name=window_id, default=None)
         if window:
             window.kill()
         
-        # If no windows are left (or only the automatic 'bash/fish' window that sometimes spawns)
-        # we kill the session to be sure.
-        if len(self.session.windows) == 0:
-            self.session.kill()
-        elif len(self.session.windows) == 1 and self.session.windows[0].window_name in ["bash", "fish", "0"]:
-            self.session.kill()
+        # Refresh windows list
+        windows = session.windows
+        if len(windows) == 0:
+            session.kill()
+        elif len(windows) == 1 and windows[0].window_name in ["bash", "fish", "0"]:
+            session.kill()

@@ -1,11 +1,11 @@
 install:
-    uv pip install -e .
+    uv sync
 
 test:
-    pytest
+    uv run --active pytest -v -s
 
 run:
-    uv run mcp-ssh-tmux
+    uv run --active mcp-ssh-tmux
 
 dev:
-    uv run python -m mcp_ssh_tmux.server
+    uv run --active python -m mcp_ssh_tmux.server

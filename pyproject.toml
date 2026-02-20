@@ -8,6 +8,13 @@ dependencies = [
 ]
 requires-python = ">=3.10"
 
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-mock",
+    "pytest-asyncio",
+]
+
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]

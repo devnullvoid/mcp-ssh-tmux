@@ -16,6 +16,8 @@ def test_session_manager_init(mock_tmux):
     manager = TmuxSessionManager(session_name="test-session")
     
     assert manager.session_name == "test-session"
+    # Access the session property to trigger the call
+    _ = manager.session
     mock_instance.sessions.get.assert_called_with(session_name="test-session", default=None)
 
 def test_resolve_connection_success(mock_tmux):
@@ -81,24 +83,23 @@ def test_read_file_logic(mock_tmux):
     mock_pane = mock_window.active_pane
     mock_session.windows.get.return_value = mock_window
     
-    # Mock snapshot to contain our marker and content
+    # In read_file, we use pane.capture_pane() directly
+    # and we call get_snapshot which also calls capture_pane
+    
     with patch.object(manager, 'get_snapshot') as mock_snapshot:
         with patch('uuid.uuid4') as mock_uuid:
             mock_uuid.return_value.hex = "MARKER_LONG_HEX"
             expected_marker = "__MCP_EOF_MARKER_L__"
             
-            # Use a more robust side_effect that doesn't StopIteration
-            side_effects = [
+            # Setup mock for pane.capture_pane used in read_file
+            mock_pane.capture_pane.return_value = [
                 f"user@host:~$ cat /tmp/test.txt && echo {expected_marker}",
-                f"user@host:~$ cat /tmp/test.txt && echo {expected_marker}\nfile content\n{expected_marker}"
+                "file content",
+                f"{expected_marker}"
             ]
             
-            def side_effect_func(*args, **kwargs):
-                if side_effects:
-                    return side_effects.pop(0)
-                return f"user@host:~$ {expected_marker}"
-            
-            mock_snapshot.side_effect = side_effect_func
+            # Setup mock_snapshot for any other calls
+            mock_snapshot.return_value = f"file content\n{expected_marker}"
             
             with patch('time.sleep'):
                 content = manager.read_file("win-id", "/tmp/test.txt")
