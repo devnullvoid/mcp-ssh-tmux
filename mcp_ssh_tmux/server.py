@@ -1,0 +1,85 @@
+import re
+from typing import Optional
+from fastmcp import FastMCP
+from .session_manager import TmuxSessionManager
+
+mcp = FastMCP("ssh-tmux")
+session_manager = TmuxSessionManager()
+
+def get_snapshot_with_hints(session_id: str) -> str:
+    """Capture snapshot and append helpful hints about the session state."""
+    snapshot = session_manager.get_snapshot(session_id)
+    
+    # Analyze the last few characters for a shell prompt
+    # Common prompts: $, #, >, %
+    last_line = snapshot.splitlines()[-1] if snapshot.strip() else ""
+    
+    hint = ""
+    if re.search(r"[$#>%]\s*$", last_line):
+        hint = "\n\n[INFO: A shell prompt was detected at the end of the screen. The command has likely finished.]"
+    elif re.search(r"\[[Yy]/[Nn]\]|password:|passphrase:", last_line, re.IGNORECASE):
+        hint = "\n\n[INFO: The session appears to be waiting for interactive input (e.g., a password or confirmation).]"
+    
+    return snapshot + hint
+
+@mcp.tool()
+def open_session(host: str, username: Optional[str] = None, port: Optional[int] = None) -> str:
+    """Open a new SSH session in a tmux window. Returns the session_id."""
+    window_id = session_manager.open_ssh(host, username, port)
+    return f"Session opened. ID: {window_id}\n\nInitial Snapshot:\n{get_snapshot_with_hints(window_id)}"
+
+@mcp.tool()
+def send_command(session_id: str, command: str) -> str:
+    """Send a command to an active session and return the screen snapshot."""
+    try:
+        session_manager.send_keys(session_id, command)
+        import time
+        time.sleep(0.5)  # Brief wait for command to register and output to appear
+        return get_snapshot_with_hints(session_id)
+    except ValueError as e:
+        return str(e)
+
+@mcp.tool()
+def get_snapshot(session_id: str) -> str:
+    """Get the current screen state of a session."""
+    return get_snapshot_with_hints(session_id)
+
+@mcp.tool()
+def list_sessions() -> str:
+    """List all active SSH sessions."""
+    sessions = session_manager.list_windows()
+    if not sessions:
+        return "No active sessions."
+    return "\n".join([f"- {s['window_id']}" for s in sessions])
+
+@mcp.tool()
+def close_session(session_id: str) -> str:
+    """Close an active SSH session."""
+    session_manager.close_window(session_id)
+    return f"Session {session_id} closed."
+
+@mcp.resource("ssh-tmux://{session_id}/snapshot")
+def get_session_snapshot_resource(session_id: str) -> str:
+    """Live snapshot of the terminal screen."""
+    return get_snapshot_with_hints(session_id)
+
+@mcp.tool()
+def read_remote_file(session_id: str, remote_path: str) -> str:
+    """Read a file from the remote host using the established session."""
+    try:
+        content = session_manager.read_file(session_id, remote_path)
+        return content if content else f"No content found for {remote_path} or file read timed out."
+    except Exception as e:
+        return f"Error reading remote file: {str(e)}"
+
+@mcp.tool()
+def write_remote_file(session_id: str, remote_path: str, content: str, append: bool = False) -> str:
+    """Write content to a file on the remote host using the established session."""
+    try:
+        session_manager.write_file(session_id, remote_path, content, append)
+        return f"Successfully wrote to {remote_path}"
+    except Exception as e:
+        return f"Error writing remote file: {str(e)}"
+
+if __name__ == "__main__":
+    mcp.run()
