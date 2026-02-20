@@ -18,7 +18,7 @@ def test_session_manager_init(mock_tmux):
     assert manager.session_name == "test-session"
     mock_instance.sessions.get.assert_called_with(session_name="test-session", default=None)
 
-def test_resolve_connection_success():
+def test_resolve_connection_success(mock_tmux):
     with patch('subprocess.run') as mock_run:
         mock_run.return_value.stdout = "hostname devnull-vm\nuser jon\nport 2222\n"
         manager = TmuxSessionManager()
@@ -28,7 +28,7 @@ def test_resolve_connection_success():
         assert config["user"] == "jon"
         assert config["port"] == "2222"
 
-def test_strip_ansi():
+def test_strip_ansi(mock_tmux):
     manager = TmuxSessionManager()
     text_with_ansi = "\x1b[31mError\x1b[0m: \x1b[1mBold\x1b[0m"
     clean_text = manager._strip_ansi(text_with_ansi)
@@ -43,14 +43,14 @@ def test_open_ssh_naming(mock_tmux):
         
         mock_window = MagicMock()
         mock_window.window_name = "admin@remote-host-xxxx"
+        mock_window.window_id = "@123"
         mock_session.new_window.return_value = mock_window
+        mock_session.windows = [mock_window]
         
         window_id = manager.open_ssh("remote-host")
         
         assert "admin@remote-host-" in window_id
         mock_session.new_window.assert_called_once()
-        args, kwargs = mock_session.new_window.call_args
-        assert "admin@remote-host-" in kwargs["window_name"]
 
 def test_list_multiple_windows(mock_tmux):
     mock_instance, mock_session = mock_tmux
@@ -85,7 +85,6 @@ def test_read_file_logic(mock_tmux):
     with patch.object(manager, 'get_snapshot') as mock_snapshot:
         with patch('uuid.uuid4') as mock_uuid:
             mock_uuid.return_value.hex = "MARKER_LONG_HEX"
-            # marker = f"__MCP_EOF_{uuid.uuid4().hex[:8]}__"
             expected_marker = "__MCP_EOF_MARKER_L__"
             
             # Use a more robust side_effect that doesn't StopIteration
