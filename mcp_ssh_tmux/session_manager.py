@@ -71,7 +71,19 @@ class TmuxSessionManager:
             ssh_cmd += f" {resolved_host}"
 
         # Create window and run command DIRECTLY
-        self.session.new_window(window_name=window_id, attach=False, window_shell=ssh_cmd)
+        window = self.session.new_window(window_name=window_id, attach=False, window_shell=ssh_cmd)
+        
+        # Set remain-on-exit so we can see why a session died
+        window.set_option("remain-on-exit", "on")
+
+        # Cleanup the default initial window if it's still there and empty
+        # This ensures the session will actually close when all SSH windows are gone
+        for w in self.session.windows:
+            if w.window_name in ["0", "bash"] and w.window_id != window.window_id:
+                try:
+                    w.kill()
+                except:
+                    pass
         
         return window_id
 
