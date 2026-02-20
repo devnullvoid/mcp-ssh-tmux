@@ -47,6 +47,7 @@ class TmuxSessionManager:
         resolved_host = config.get("hostname", host)
         resolved_user = username or config.get("user")
         resolved_port = port or config.get("port")
+        resolved_key = config.get("identityfile")
 
         # Create window name with host/user info
         short_id = uuid.uuid4().hex[:4]
@@ -61,15 +62,16 @@ class TmuxSessionManager:
         ssh_cmd = "ssh"
         if resolved_port and str(resolved_port) != "22":
             ssh_cmd += f" -p {resolved_port}"
+        if resolved_key and resolved_key != "~/.ssh/id_rsa": # Only add if not default or exists
+             # ssh -G usually returns the absolute path
+             ssh_cmd += f" -i {resolved_key}"
         if resolved_user:
             ssh_cmd += f" {resolved_user}@{resolved_host}"
         else:
             ssh_cmd += f" {resolved_host}"
 
-        # Create window and run command
-        window = self.session.new_window(window_name=window_id, attach=False)
-        pane = window.active_pane
-        pane.send_keys(ssh_cmd, enter=True)
+        # Create window and run command DIRECTLY
+        self.session.new_window(window_name=window_id, attach=False, window_shell=ssh_cmd)
         
         return window_id
 
