@@ -203,7 +203,14 @@ class TmuxSessionManager:
         pane.send_keys(cmd, enter=True)
 
     def close_window(self, window_id: str):
-        """Close the tmux window."""
+        """Close the tmux window and kill session if it's the last one."""
         window = self.session.windows.get(window_name=window_id, default=None)
         if window:
             window.kill()
+        
+        # If no windows are left (or only the automatic 'bash/fish' window that sometimes spawns)
+        # we kill the session to be sure.
+        if len(self.session.windows) == 0:
+            self.session.kill()
+        elif len(self.session.windows) == 1 and self.session.windows[0].window_name in ["bash", "fish", "0"]:
+            self.session.kill()
