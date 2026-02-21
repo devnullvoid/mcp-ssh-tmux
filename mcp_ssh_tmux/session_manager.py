@@ -17,7 +17,6 @@ class TmuxSessionManager:
     @property
     def session(self):
         """Property that ensures the tmux session is alive and returns it."""
-        # Re-check server/session state
         session = self.server.sessions.get(session_name=self.session_name, default=None)
         if not session:
             session = self.server.new_session(session_name=self.session_name)
@@ -40,7 +39,6 @@ class TmuxSessionManager:
                     config[parts[0].lower()] = parts[1]
             return config
         except subprocess.CalledProcessError:
-            # Fallback if ssh -G fails (e.g. host not in config and not a valid hostname)
             return {"hostname": host}
 
     def open_ssh(self, host: str, username: Optional[str] = None, port: Optional[int] = None) -> str:
@@ -52,7 +50,6 @@ class TmuxSessionManager:
         resolved_port = port or config.get("port")
         resolved_key = config.get("identityfile")
 
-        # Create window name with host/user info
         short_id = uuid.uuid4().hex[:4]
         if resolved_user:
             window_name = f"{resolved_user}@{resolved_host}-{short_id}"
@@ -61,7 +58,6 @@ class TmuxSessionManager:
         
         window_id = window_name
         
-        # Build the SSH command
         ssh_cmd = "ssh"
         if resolved_port and str(resolved_port) != "22":
             ssh_cmd += f" -p {resolved_port}"
@@ -72,17 +68,17 @@ class TmuxSessionManager:
         else:
             ssh_cmd += f" {resolved_host}"
 
-        # Create window and run command DIRECTLY
-        # Use session property to ensure it exists
         new_win = self.session.new_window(window_name=window_id, attach=False, window_shell=ssh_cmd)
         
-        # Set remain-on-exit so we can see why a session died
+        # Set a standard large size (120x40)
+        try:
+            new_win.active_pane.resize_pane(x=120, y=40)
+        except:
+            pass # Might fail if tmux version doesn't support direct resize on detached pane
+            
         new_win.set_option("remain-on-exit", "on")
 
-        # Cleanup the default initial window if it's still there and empty
-        # This ensures the session will actually close when all SSH windows are gone
         for w in self.session.windows:
-            # Check for common default names and ensure it's NOT our new window
             if w.window_id != new_win.window_id and w.window_name in ["0", "bash", "fish"]:
                 try:
                     w.kill()
@@ -99,36 +95,29 @@ class TmuxSessionManager:
         ]
 
     def _strip_ansi(self, text: str) -> str:
-        """Strip all ANSI escape sequences including CSI, OSC, and other types."""
-        # Remove CSI sequences: \x1b[...
+        """Strip all ANSI escape sequences."""
         text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", text)
-        # Remove OSC sequences: \x1b]...(\x07|\x1b\\)
         text = re.sub(r"\x1b\][^\x07]*\x07", "", text)
         text = re.sub(r"\x1b\][^\x1b]*\x1b\\", "", text)
-        # Remove other escape sequences
         text = re.sub(r"\x1b[PX^_][^\x1b]*\x1b\\", "", text)
-        # Remove terminal UI noise like <N> (fish iTerm integration)
         text = re.sub(r"<\d+>", "", text)
-        # Remove special characters that appear in terminal output
         text = re.sub(r"[\r\x00\u240c\u23ce]", "", text)
-        # Remove any remaining single control characters
         text = re.sub(r"[\x01-\x08\x0b\x0c\x0e-\x1f\x7f]", "", text)
         return text
 
-    def get_snapshot(self, window_id: str) -> str:
+    def get_snapshot(self, window_id: str, lines: int = 40) -> str:
         """Capture the current screen of the tmux window and clean it."""
         window = self.session.windows.get(window_name=window_id, default=None)
         if not window:
             return f"Error: Window {window_id} not found."
         
         pane = window.active_pane
-        # Capture standard view (last ~40 lines) to avoid overwhelming the LLM
-        # capture_pane returns a list of strings
-        raw_lines = pane.capture_pane()
+        # Capture the specified number of lines. 
+        # Using '-' for history (e.g. '-100' for last 100 lines including scrollback)
+        raw_lines = pane.capture_pane(start=f"-{lines}" if lines > 40 else None)
         
-        # Limit to last 40 lines if it's very long
-        if len(raw_lines) > 40:
-            raw_lines = raw_lines[-40:]
+        if len(raw_lines) > lines:
+            raw_lines = raw_lines[-lines:]
             
         raw_text = "\n".join(raw_lines)
         return self._strip_ansi(raw_text)
@@ -158,13 +147,12 @@ class TmuxSessionManager:
         
         pane.send_keys(cmd, enter=True)
         
-        # Wait and capture
         import time
         max_attempts = 10
         for _ in range(max_attempts):
             time.sleep(0.5)
-            # Use raw capture here to avoid 40-line limit
-            snapshot = "\n".join(pane.capture_pane())
+            # Use raw capture here to avoid line limits
+            snapshot = "\n".join(pane.capture_pane(start="-100")) 
             if marker in snapshot:
                 parts = snapshot.split(marker)
                 if len(parts) >= 3:
@@ -195,13 +183,11 @@ class TmuxSessionManager:
 
     def close_window(self, window_id: str):
         """Close the tmux window and kill session if it's the last one."""
-        # Use session property to ensure it's still there
         session = self.session
         window = session.windows.get(window_name=window_id, default=None)
         if window:
             window.kill()
         
-        # Refresh windows list
         windows = session.windows
         if len(windows) == 0:
             session.kill()

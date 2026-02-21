@@ -13,9 +13,9 @@ def get_manager() -> TmuxSessionManager:
         _session_manager = TmuxSessionManager()
     return _session_manager
 
-def get_snapshot_with_hints(session_id: str) -> str:
+def get_snapshot_with_hints(session_id: str, lines: int = 40) -> str:
     """Capture snapshot and append helpful hints about the session state."""
-    snapshot = get_manager().get_snapshot(session_id)
+    snapshot = get_manager().get_snapshot(session_id, lines=lines)
     
     # Analyze the last few characters for a shell prompt
     # Common prompts: $, #, >, %
@@ -36,20 +36,31 @@ def open_session(host: str, username: Optional[str] = None, port: Optional[int] 
     return f"Session opened. ID: {window_id}\n\nInitial Snapshot:\n{get_snapshot_with_hints(window_id)}"
 
 @mcp.tool()
-def send_command(session_id: str, command: str) -> str:
-    """Send a command to an active session and return the screen snapshot."""
+def send_command(session_id: str, command: str, lines: int = 40) -> str:
+    """Send a command to an active session and return the screen snapshot.
+    
+    Args:
+        session_id: The ID of the session.
+        command: The command to send.
+        lines: Number of lines to capture from the end of the screen (default 40).
+    """
     try:
         get_manager().send_keys(session_id, command)
         import time
         time.sleep(0.5)  # Brief wait for command to register and output to appear
-        return get_snapshot_with_hints(session_id)
+        return get_snapshot_with_hints(session_id, lines=lines)
     except ValueError as e:
         return str(e)
 
 @mcp.tool()
-def get_snapshot(session_id: str) -> str:
-    """Get the current screen state of a session."""
-    return get_snapshot_with_hints(session_id)
+def get_snapshot(session_id: str, lines: int = 40) -> str:
+    """Get the current screen state of a session.
+    
+    Args:
+        session_id: The ID of the session.
+        lines: Number of lines to capture from the end of the screen (default 40).
+    """
+    return get_snapshot_with_hints(session_id, lines=lines)
 
 @mcp.tool()
 def list_sessions() -> str:
