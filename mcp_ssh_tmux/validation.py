@@ -26,7 +26,6 @@ class CommandValidator:
         r'\bdd\s+.*of=/dev/',  # dd to device files
         r'\b:\(\)\{.*:\|:.*\};:',  # fork bomb
         r'\bmkfs\b',
-        r'\bformat\b',
     ]
 
     @classmethod

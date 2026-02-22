@@ -78,12 +78,19 @@ class TmuxSessionManager:
             
         new_win.set_option("remain-on-exit", "on")
 
-        for w in self.session.windows:
-            if w.window_id != new_win.window_id and w.window_name in ["0", "bash", "fish"]:
-                try:
-                    w.kill()
-                except:
-                    pass
+        # Cleanup ANY other windows if this is our first SSH window
+        # (Usually just the one default window created by libtmux)
+        all_windows = self.session.windows
+        if len(all_windows) > 1:
+            for w in all_windows:
+                if w.window_id != new_win.window_id:
+                    # If the other window is a default one (no '@' or '-' usually)
+                    # or if it's named 0, bash, fish, zsh
+                    if "@" not in w.window_name or w.window_name in ["0", "bash", "fish", "zsh"]:
+                        try:
+                            w.kill()
+                        except:
+                            pass
         
         return window_id
 
@@ -183,13 +190,20 @@ class TmuxSessionManager:
 
     def close_window(self, window_id: str):
         """Close the tmux window and kill session if it's the last one."""
-        session = self.session
-        window = session.windows.get(window_name=window_id, default=None)
-        if window:
-            window.kill()
-        
-        windows = session.windows
-        if len(windows) == 0:
-            session.kill()
-        elif len(windows) == 1 and windows[0].window_name in ["bash", "fish", "0"]:
-            session.kill()
+        try:
+            session = self.session
+            window = session.windows.get(window_name=window_id, default=None)
+            if window:
+                window.kill()
+            
+            # Check if any non-default windows remain
+            try:
+                remaining = session.windows
+                if len(remaining) == 0:
+                    session.kill()
+                elif len(remaining) == 1 and remaining[0].window_name in ["0", "bash", "fish", "zsh"]:
+                    session.kill()
+            except:
+                pass # Session already gone
+        except:
+            pass # Server/Session inaccessible

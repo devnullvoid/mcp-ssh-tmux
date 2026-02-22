@@ -46,9 +46,23 @@ def send_command(session_id: str, command: str, lines: int = 40) -> str:
     """
     try:
         get_manager().send_keys(session_id, command)
+        
+        # Poll for a few seconds to see if a prompt appears or output settles
         import time
-        time.sleep(0.5)  # Brief wait for command to register and output to appear
-        return get_snapshot_with_hints(session_id, lines=lines)
+        max_poll = 2.0
+        start_time = time.time()
+        snapshot = ""
+        while time.time() - start_time < max_poll:
+            time.sleep(0.2)
+            snapshot = get_snapshot_with_hints(session_id, lines=lines)
+            # If we see a prompt info hint, the command likely finished
+            if "[INFO: A shell prompt was detected" in snapshot:
+                break
+            # If we see an interactive prompt hint, return immediately
+            if "[INFO: The session appears to be waiting for interactive input" in snapshot:
+                break
+                
+        return snapshot
     except ValueError as e:
         return str(e)
 
