@@ -6,7 +6,7 @@ readme = "README.md"
 authors = [
     { name = "Jon Rogers", email = "67245+devnullvoid@users.noreply.github.com" }
 ]
-license = { text = "MIT" }
+license = { file = "LICENSE" }
 keywords = ["mcp", "ssh", "tmux", "terminal", "persistence"]
 classifiers = [
     "Development Status :: 4 - Beta",
