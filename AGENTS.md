@@ -49,6 +49,7 @@
 ### Phase 3: Advanced & Beyond
 - [x] **File Transfer**: `read_remote_file` and `write_remote_file` implemented.
 - [x] **Streaming Status**: `ssh-tmux://{session_id}/snapshot` MCP resource implemented.
+- [x] **PyPI Release**: v0.1.0 published.
 - [ ] **Multi-Pane Layouts**: Add tool to split windows for side-by-side monitoring (e.g., `tail -f` in one pane, interactive shell in another).
 - [ ] **Port Forwarding**: Add tools to manage SSH tunnels via the same tmux background process.
 - [ ] **Session Re-attachment**: Improve `list_sessions` to allow re-associating with tmux windows created in previous server runs.
