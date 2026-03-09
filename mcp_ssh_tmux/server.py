@@ -86,7 +86,12 @@ def list_sessions() -> str:
 
 @mcp.tool()
 def close_session(session_id: str) -> str:
-    """Close an active SSH session and return its final screen state."""
+    """Close an active SSH session and return its final screen state.
+    
+    WARNING: Closing a session will terminate any running processes in that session.
+    For long-running tasks (builds, downloads, etc.), leave the session open until
+    the task completes. You can monitor progress using get_snapshot() without closing.
+    """
     snapshot = get_snapshot_with_hints(session_id)
     get_manager().close_window(session_id)
     return f"Session {session_id} closed.\n\nFinal Snapshot:\n{snapshot}"

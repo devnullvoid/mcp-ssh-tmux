@@ -56,7 +56,16 @@ Add this to your `mcp.json` (e.g., in Claude Desktop, Cursor, or 1mcp):
 -   `read_remote_file(session_id, remote_path)`: Efficiently reads a remote file.
 -   `write_remote_file(session_id, remote_path, content, append)`: Writes content to a remote file.
 -   `list_sessions()`: Lists all active SSH windows.
--   `close_session(session_id)`: Kills the window and cleans up.
+-   `close_session(session_id)`: Kills the window and cleans up. **WARNING**: This terminates any running processes in the session. For long-running tasks, leave the session open and monitor with `get_snapshot()`.
+
+## Important Notes
+
+### Session Management
+
+- **Do not close sessions with active processes**: Closing a session terminates all running commands (builds, downloads, etc.)
+- **Monitor long-running tasks**: Use `get_snapshot()` to check progress without closing the session
+- **Sessions persist**: SSH connections remain alive in tmux even if the MCP server restarts
+- **Manual inspection**: Run `tmux attach -t mcp-ssh` to see what's happening in real-time
 
 ## License
 
