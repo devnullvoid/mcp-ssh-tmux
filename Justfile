@@ -11,5 +11,5 @@ dev:
     uv run --active python -m mcp_ssh_tmux.server
 
 release version:
-    git tag -a v{{version}} -m "Release v{{version}}"
-    git push origin v{{version}}
+    git tag -a {{version}} -m "Release {{version}}"
+    git push origin {{version}}
