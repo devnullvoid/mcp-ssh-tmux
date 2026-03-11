@@ -76,6 +76,29 @@ def send_command(session_id: str, command: str, lines: int = 40) -> str:
         return str(e)
 
 @mcp.tool()
+def send_keys(session_id: str, keys: str) -> str:
+    """Send raw keystrokes to a session without appending Enter.
+    
+    Use this for:
+    - Interrupting commands: keys="C-c" (Ctrl+C)
+    - Sending EOF: keys="C-d" (Ctrl+D)
+    - Interactive input: keys="yes" (without submitting)
+    - Special keys: keys="Enter", keys="Tab", keys="BSpace"
+    
+    Tmux key notation: C-x (Ctrl), M-x (Alt), S-x (Shift). Multiple keys: "C-c Enter"
+    After sending keys, use get_snapshot() to see the result.
+    
+    Args:
+        session_id: The ID of the session (format: user@host-<id>).
+        keys: Keys to send using tmux notation.
+    """
+    try:
+        get_manager().send_keys(session_id, keys, literal=True)
+        return f"Keys sent: {keys}\n\nUse get_snapshot() to see the result."
+    except ValueError as e:
+        return str(e)
+
+@mcp.tool()
 def get_snapshot(session_id: str, lines: int = 40) -> str:
     """Get the current screen state of a session.
     

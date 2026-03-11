@@ -129,18 +129,25 @@ class TmuxSessionManager:
         raw_text = "\n".join(raw_lines)
         return self._strip_ansi(raw_text)
 
-    def send_keys(self, window_id: str, keys: str):
-        """Send keys to the tmux window after validation."""
-        is_valid, error = self.command_validator.validate_command(keys, check_dangerous=True, pty_aware=True)
-        if not is_valid:
-            raise ValueError(f"Command validation failed: {error}")
+    def send_keys(self, window_id: str, keys: str, literal: bool = False):
+        """Send keys to the tmux window after validation.
+        
+        Args:
+            window_id: The window identifier
+            keys: Keys to send (can include tmux key notation like C-c, C-d)
+            literal: If True, send keys without Enter and skip command validation
+        """
+        if not literal:
+            is_valid, error = self.command_validator.validate_command(keys, check_dangerous=True, pty_aware=True)
+            if not is_valid:
+                raise ValueError(f"Command validation failed: {error}")
 
         window = self.session.windows.get(window_name=window_id, default=None)
         if not window:
             raise ValueError(f"Window {window_id} not found")
         
         pane = window.active_pane
-        pane.send_keys(keys, enter=True)
+        pane.send_keys(keys, enter=not literal, literal=literal)
 
     def read_file(self, window_id: str, remote_path: str) -> str:
         """Read a remote file using cat over the tmux session."""

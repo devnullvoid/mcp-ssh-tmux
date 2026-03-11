@@ -18,7 +18,8 @@ release version:
         echo "Error: Version must be in format v#.#.# (e.g., v0.1.1)"
         exit 1
     fi
-    new_version="${{version}#v}"
+    new_version="{{version}}"
+    new_version="${new_version#v}"
     # Update pyproject.toml
     sed -i "s/^version = .*/version = \"$new_version\"/" pyproject.toml
     # Verify the update worked
