@@ -1,5 +1,10 @@
 # mcp-ssh-tmux
 
+[![PyPI version](https://badge.fury.io/py/mcp-ssh-tmux.svg)](https://badge.fury.io/py/mcp-ssh-tmux)
+[![Downloads](https://pepy.tech/badge/mcp-ssh-tmux)](https://pepy.tech/project/mcp-ssh-tmux)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![GitHub stars](https://img.shields.io/github/stars/devnullvoid/mcp-ssh-tmux.svg)](https://github.com/devnullvoid/mcp-ssh-tmux/stargazers)
+
 A high-performance, persistent Model Context Protocol (MCP) server that manages SSH sessions via a local `tmux` instance.
 
 ## Why this exists?
@@ -78,6 +83,14 @@ Add this to your `mcp.json` (e.g., in Claude Desktop, Cursor, or 1mcp):
 ## Acknowledgments
 
 Built with [FastMCP](https://github.com/PrefectHQ/fastmcp) and [libtmux](https://github.com/tmux-python/libtmux).
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
+
+## Star History
+
+If you find this project useful, please consider giving it a star! ⭐
 
 ## License
 
