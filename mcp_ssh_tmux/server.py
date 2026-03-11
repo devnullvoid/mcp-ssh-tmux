@@ -103,7 +103,10 @@ def get_session_snapshot_resource(session_id: str) -> str:
 
 @mcp.tool()
 def read_remote_file(session_id: str, remote_path: str) -> str:
-    """Read a file from the remote host using the established session."""
+    """Read a file from the remote host using the established session.
+    
+    Use this tool to efficiently read file contents instead of running 'cat' with send_command/get_snapshot.
+    This method handles large files, binary data, and special characters correctly."""
     try:
         content = get_manager().read_file(session_id, remote_path)
         return content if content else f"No content found for {remote_path} or file read timed out."
@@ -112,7 +115,10 @@ def read_remote_file(session_id: str, remote_path: str) -> str:
 
 @mcp.tool()
 def write_remote_file(session_id: str, remote_path: str, content: str, append: bool = False) -> str:
-    """Write content to a file on the remote host using the established session."""
+    """Write content to a file on the remote host using the established session.
+    
+    Use this tool to write file contents instead of using echo, redirection, or heredocs with send_command.
+    This method handles large files, binary data, and special characters correctly."""
     try:
         get_manager().write_file(session_id, remote_path, content, append)
         return f"Successfully wrote to {remote_path}"

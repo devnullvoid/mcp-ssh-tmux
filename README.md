@@ -4,7 +4,7 @@ A high-performance, persistent Model Context Protocol (MCP) server that manages 
 
 ## Why this exists?
 
-Unlike traditional SSH automation that relies on complex regex to detect command completion, this project treats the AI agent as a human user who "looks" at the screen. The server provides visual snapshots, and the AI agent interprets the state (prompts, errors, etc.).
+Traditional SSH automation runs individual commands without state tracking between executions. Other implementations rely on complex regex patterns to detect command completion. By using `tmux` as a persistent terminal multiplexer, this project eliminates that complexity entirely. The AI agent simply "looks" at the screen like a human would - the server provides visual snapshots, and the agent interprets prompts, errors, and output naturally.
 
 ## Key Features
 
