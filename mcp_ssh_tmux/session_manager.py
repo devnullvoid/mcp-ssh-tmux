@@ -163,20 +163,27 @@ class TmuxSessionManager:
         
         import time
         max_attempts = 10
-        for _ in range(max_attempts):
+        for attempt in range(max_attempts):
             time.sleep(0.5)
             # Use raw capture here to avoid line limits
-            snapshot = "\n".join(pane.capture_pane(start="-100")) 
+            snapshot = "\n".join(pane.capture_pane(start="-100"))
+            
             if marker in snapshot:
-                parts = snapshot.split(marker)
-                if len(parts) >= 3:
-                    return self._strip_ansi(parts[1]).strip()
-                elif len(parts) == 2:
-                    lines = snapshot.splitlines()
-                    for i, line in enumerate(lines):
-                        if marker in line:
-                            if i > 0:
-                                return self._strip_ansi("\n".join(lines[:i])).strip()
+                # Find the command line and marker line
+                lines = snapshot.splitlines()
+                cmd_idx = None
+                marker_idx = None
+                
+                for i, line in enumerate(lines):
+                    if cmd.strip() in line or f"cat {remote_path}" in line:
+                        cmd_idx = i
+                    if marker in line:
+                        marker_idx = i
+                
+                # Extract content between command and marker
+                if cmd_idx is not None and marker_idx is not None and marker_idx > cmd_idx:
+                    content_lines = lines[cmd_idx + 1:marker_idx]
+                    return self._strip_ansi("\n".join(content_lines)).strip()
         
         return ""
 
