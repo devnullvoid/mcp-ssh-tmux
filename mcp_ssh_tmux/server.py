@@ -31,7 +31,10 @@ def get_snapshot_with_hints(session_id: str, lines: int = 40) -> str:
 
 @mcp.tool()
 def open_session(host: str, username: Optional[str] = None, port: Optional[int] = None) -> str:
-    """Open a new SSH session in a tmux window. Returns the session_id."""
+    """Open a new SSH session in a tmux window. Returns the session_id.
+    
+    The host can be an SSH config alias or a hostname/IP. The session_id will be in the format 'user@host-<id>'.
+    The initial snapshot is included in the response to verify connection success."""
     window_id = get_manager().open_ssh(host, username, port)
     return f"Session opened. ID: {window_id}\n\nInitial Snapshot:\n{get_snapshot_with_hints(window_id)}"
 
@@ -39,8 +42,14 @@ def open_session(host: str, username: Optional[str] = None, port: Optional[int] 
 def send_command(session_id: str, command: str, lines: int = 40) -> str:
     """Send a command to an active session and return the screen snapshot.
     
+    This tool automatically polls for up to 2 seconds waiting for the command to complete.
+    The response includes [INFO: ...] hints about detected prompts or interactive input requests.
+    
+    For long-running commands (builds, downloads, etc.), use get_snapshot() to check progress periodically.
+    Do NOT close the session while processes are running - they will be terminated.
+    
     Args:
-        session_id: The ID of the session.
+        session_id: The ID of the session (format: user@host-<id>).
         command: The command to send.
         lines: Number of lines to capture from the end of the screen (default 40).
     """
@@ -70,8 +79,11 @@ def send_command(session_id: str, command: str, lines: int = 40) -> str:
 def get_snapshot(session_id: str, lines: int = 40) -> str:
     """Get the current screen state of a session.
     
+    Use this to check on long-running commands without sending new input.
+    The response includes [INFO: ...] hints about detected prompts or interactive states.
+    
     Args:
-        session_id: The ID of the session.
+        session_id: The ID of the session (format: user@host-<id>).
         lines: Number of lines to capture from the end of the screen (default 40).
     """
     return get_snapshot_with_hints(session_id, lines=lines)
