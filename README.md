@@ -16,6 +16,13 @@ Traditional SSH automation runs individual commands without state tracking betwe
 
 ## Installation
 
+### Requirements
+
+-   **tmux** must be installed on your system
+    -   Ubuntu/Debian: `apt install tmux`
+    -   macOS: `brew install tmux`
+    -   Arch: `pacman -S tmux`
+
 ### Via `uv` (Recommended)
 
 ```bash
@@ -67,6 +74,10 @@ Add this to your `mcp.json` (e.g., in Claude Desktop, Cursor, or 1mcp):
 - **Monitor long-running tasks**: Use `get_snapshot()` to check progress without closing the session
 - **Sessions persist**: SSH connections remain alive in tmux even if the MCP server restarts
 - **Manual inspection**: Run `tmux attach -t mcp-ssh` to see what's happening in real-time
+
+## Acknowledgments
+
+Built with [FastMCP](https://github.com/PrefectHQ/fastmcp) and [libtmux](https://github.com/tmux-python/libtmux).
 
 ## License
 
