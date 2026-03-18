@@ -39,10 +39,10 @@ def open_session(host: str, username: Optional[str] = None, port: Optional[int] 
     return f"Session opened. ID: {window_id}\n\nInitial Snapshot:\n{get_snapshot_with_hints(window_id)}"
 
 @mcp.tool()
-def send_command(session_id: str, command: str, lines: int = 40) -> str:
+def send_command(session_id: str, command: str, lines: int = 40, timeout: float = 2.0) -> str:
     """Send a command to an active session and return the screen snapshot.
     
-    This tool automatically polls for up to 2 seconds waiting for the command to complete.
+    This tool automatically polls waiting for the command to complete.
     The response includes [INFO: ...] hints about detected prompts or interactive input requests.
     
     For long-running commands (builds, downloads, etc.), use get_snapshot() to check progress periodically.
@@ -52,16 +52,16 @@ def send_command(session_id: str, command: str, lines: int = 40) -> str:
         session_id: The ID of the session (format: user@host-<id>).
         command: The command to send.
         lines: Number of lines to capture from the end of the screen (default 40).
+        timeout: Max seconds to poll for command completion (default 2.0). Increase for slower commands like package installs.
     """
     try:
         get_manager().send_keys(session_id, command)
         
-        # Poll for a few seconds to see if a prompt appears or output settles
+        # Poll until a prompt appears, output settles, or timeout
         import time
-        max_poll = 2.0
         start_time = time.time()
         snapshot = ""
-        while time.time() - start_time < max_poll:
+        while time.time() - start_time < timeout:
             time.sleep(0.2)
             snapshot = get_snapshot_with_hints(session_id, lines=lines)
             # If we see a prompt info hint, the command likely finished
