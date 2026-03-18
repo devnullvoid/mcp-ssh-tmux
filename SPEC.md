@@ -21,7 +21,7 @@ The AI Agent is responsible for:
 
 ## Tool Definitions
 - \`open_session(host, username, port)\`: Creates a window, runs \`ssh\`, returns initial text.
-- \`send_command(session_id, command)\`: Sends keys + Enter, waits briefly, returns screen text.
+- \`send_command(session_id, command, lines, timeout)\`: Sends keys + Enter, polls for up to \`timeout\` seconds (default 2.0), returns screen text.
 - \`get_snapshot(session_id)\`: Returns current screen text without sending keys.
 - \`list_sessions()\`: Returns active window IDs.
 - \`close_session(session_id)\`: Kills the tmux window.

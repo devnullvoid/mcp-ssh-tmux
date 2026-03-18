@@ -63,7 +63,7 @@ Add this to your `mcp.json` (e.g., in Claude Desktop, Cursor, or 1mcp):
 ## Tools
 
 -   `open_session(host, username, port)`: Opens a new SSH connection in a unique tmux window.
--   `send_command(session_id, command, lines)`: Sends a command and polls for a prompt/output.
+-   `send_command(session_id, command, lines, timeout)`: Sends a command and polls for a prompt/output. `timeout` (default 2.0s) controls how long to wait — increase for slower commands like package installs.
 -   `send_keys(session_id, keys)`: Sends raw keystrokes without Enter. Use for Ctrl+C, Ctrl+D, interactive input, etc.
 -   `get_snapshot(session_id, lines)`: Captures the current screen state.
 -   `read_remote_file(session_id, remote_path)`: Efficiently reads a remote file.
