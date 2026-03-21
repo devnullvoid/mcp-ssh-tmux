@@ -17,6 +17,10 @@
 - The server provides raw visual snapshots. The AI agent is responsible for interpreting state (prompts, errors, etc.).
 - **Hints**: `server.py` appends `[INFO: ...]` hints to snapshots when common shell prompts or password requests are detected.
 
+### Key Dispatch
+- **`send_keys` (literal mode)** uses `pane.cmd("send-keys", *keys.split())` to pass each token as a separate tmux argument. This lets tmux interpret key names (`Enter`, `C-c`, `Tab`) while still sending unrecognized tokens as literal text.
+- **Do NOT use libtmux's `literal=True`** — it passes `-l` to tmux, which disables all key name interpretation (e.g., `"yes Enter"` would type the word "Enter").
+
 ### Connection Management
 - **SSH Execution**: We start `ssh` directly as the `window_shell` command in tmux. This is more reliable than starting a shell and sending keys.
 - **Config Resolution**: We use `ssh -G <host>` to resolve aliases and identity files from the user's `~/.ssh/config`.

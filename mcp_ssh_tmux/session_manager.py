@@ -147,7 +147,12 @@ class TmuxSessionManager:
             raise ValueError(f"Window {window_id} not found")
         
         pane = window.active_pane
-        pane.send_keys(keys, enter=not literal, literal=literal)
+        if literal:
+            # Split into separate args so tmux interprets key names
+            # e.g. "yes Enter" → tmux send-keys yes Enter
+            pane.cmd("send-keys", *keys.split())
+        else:
+            pane.send_keys(keys, enter=True, literal=False)
 
     def read_file(self, window_id: str, remote_path: str) -> str:
         """Read a remote file using cat over the tmux session."""
