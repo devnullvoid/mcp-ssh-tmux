@@ -27,8 +27,10 @@ release version:
         echo "Error: Failed to update version in pyproject.toml"
         exit 1
     fi
+    # Sync lockfile
+    uv lock
     # Commit, tag, and push
-    git add pyproject.toml
+    git add pyproject.toml uv.lock
     git commit -m "chore: bump version to $new_version"
     git push
     git tag -a {{version}} -m "Release {{version}}"
