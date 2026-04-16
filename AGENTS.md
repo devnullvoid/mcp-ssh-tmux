@@ -17,6 +17,9 @@
 - The server provides raw visual snapshots. The AI agent is responsible for interpreting state (prompts, errors, etc.).
 - **Hints**: `server.py` appends `[INFO: ...]` hints to snapshots when common shell prompts or password requests are detected.
 
+### Async Polling (Critical)
+- **`send_command` and `read_file` MUST use `await asyncio.sleep()`, never `time.sleep()`**. The MCP server runs on an async event loop (FastMCP/uvicorn). Synchronous sleep blocks the entire event loop, making the server unresponsive to all other requests during the polling period. This was the root cause of a production bug where `send_command` with large timeouts (e.g., 60s for `docker service update`) killed the server's ability to handle concurrent `get_snapshot` or `list_sessions` calls.
+
 ### Key Dispatch
 - **`send_keys` (literal mode)** uses `pane.cmd("send-keys", *keys.split())` to pass each token as a separate tmux argument. This lets tmux interpret key names (`Enter`, `C-c`, `Tab`) while still sending unrecognized tokens as literal text.
 - **Do NOT use libtmux's `literal=True`** — it passes `-l` to tmux, which disables all key name interpretation (e.g., `"yes Enter"` would type the word "Enter").
