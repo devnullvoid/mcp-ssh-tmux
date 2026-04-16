@@ -1,4 +1,5 @@
 import re
+import asyncio
 from typing import Optional
 from fastmcp import FastMCP
 from .session_manager import TmuxSessionManager
@@ -39,7 +40,7 @@ def open_session(host: str, username: Optional[str] = None, port: Optional[int] 
     return f"Session opened. ID: {window_id}\n\nInitial Snapshot:\n{get_snapshot_with_hints(window_id)}"
 
 @mcp.tool()
-def send_command(session_id: str, command: str, lines: int = 40, timeout: float = 2.0) -> str:
+async def send_command(session_id: str, command: str, lines: int = 40, timeout: float = 2.0) -> str:
     """Send a command to an active session and return the screen snapshot.
     
     This tool automatically polls waiting for the command to complete.
@@ -58,11 +59,11 @@ def send_command(session_id: str, command: str, lines: int = 40, timeout: float 
         get_manager().send_keys(session_id, command)
         
         # Poll until a prompt appears, output settles, or timeout
-        import time
-        start_time = time.time()
+        loop = asyncio.get_event_loop()
+        start_time = loop.time()
         snapshot = ""
-        while time.time() - start_time < timeout:
-            time.sleep(0.2)
+        while loop.time() - start_time < timeout:
+            await asyncio.sleep(0.2)
             snapshot = get_snapshot_with_hints(session_id, lines=lines)
             # If we see a prompt info hint, the command likely finished
             if "[INFO: A shell prompt was detected" in snapshot:
@@ -137,13 +138,13 @@ def get_session_snapshot_resource(session_id: str) -> str:
     return get_snapshot_with_hints(session_id)
 
 @mcp.tool()
-def read_remote_file(session_id: str, remote_path: str) -> str:
+async def read_remote_file(session_id: str, remote_path: str) -> str:
     """Read a file from the remote host using the established session.
     
     Use this tool to efficiently read file contents instead of running 'cat' with send_command/get_snapshot.
     This method handles large files, binary data, and special characters correctly."""
     try:
-        content = get_manager().read_file(session_id, remote_path)
+        content = await get_manager().read_file(session_id, remote_path)
         return content if content else f"No content found for {remote_path} or file read timed out."
     except Exception as e:
         return f"Error reading remote file: {str(e)}"

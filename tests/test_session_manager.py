@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, AsyncMock
 from mcp_ssh_tmux.session_manager import TmuxSessionManager
 
 @pytest.fixture
@@ -75,7 +75,8 @@ def test_list_multiple_windows(mock_tmux):
     assert "user@host1-bbbb" in ids
     assert "admin@host2-cccc" in ids
 
-def test_read_file_logic(mock_tmux):
+@pytest.mark.asyncio
+async def test_read_file_logic(mock_tmux):
     mock_instance, mock_session = mock_tmux
     manager = TmuxSessionManager()
     
@@ -101,6 +102,6 @@ def test_read_file_logic(mock_tmux):
             # Setup mock_snapshot for any other calls
             mock_snapshot.return_value = f"file content\n{expected_marker}"
             
-            with patch('time.sleep'):
-                content = manager.read_file("win-id", "/tmp/test.txt")
+            with patch('asyncio.sleep', new_callable=AsyncMock):
+                content = await manager.read_file("win-id", "/tmp/test.txt")
                 assert content == "file content"

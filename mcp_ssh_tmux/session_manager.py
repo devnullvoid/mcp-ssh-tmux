@@ -154,7 +154,7 @@ class TmuxSessionManager:
         else:
             pane.send_keys(keys, enter=True, literal=False)
 
-    def read_file(self, window_id: str, remote_path: str) -> str:
+    async def read_file(self, window_id: str, remote_path: str) -> str:
         """Read a remote file using cat over the tmux session."""
         window = self.session.windows.get(window_name=window_id, default=None)
         if not window:
@@ -166,10 +166,10 @@ class TmuxSessionManager:
         
         pane.send_keys(cmd, enter=True)
         
-        import time
+        import asyncio
         max_attempts = 10
         for attempt in range(max_attempts):
-            time.sleep(0.5)
+            await asyncio.sleep(0.5)
             # Use raw capture here to avoid line limits
             snapshot = "\n".join(pane.capture_pane(start="-100"))
             
