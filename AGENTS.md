@@ -27,7 +27,8 @@
 ### Connection Management
 - **SSH Execution**: We start `ssh` directly as the `window_shell` command in tmux. This is more reliable than starting a shell and sending keys.
 - **Config Resolution**: We use `ssh -G <host>` to resolve aliases and identity files from the user's `~/.ssh/config`.
-- **BatchMode**: We intentionally avoided `BatchMode=yes` to allow the AI to handle interactive password/passphrase prompts visually.
+- **Interactive Sessions**: We intentionally avoid `BatchMode=yes` for the primary tmux-backed SSH session so the AI can handle interactive password/passphrase prompts visually.
+- **Direct File Reads**: `read_remote_file` first attempts a separate non-interactive `ssh -o BatchMode=yes ... cat -- <path>` using the resolved host/user/port/key info. If that fails, it falls back to bounded tmux history capture.
 - **Persistence**: `remain-on-exit` is enabled via `window.set_option("remain-on-exit", "on")`. This allows capturing final errors after a connection dies.
 
 ### Session Lifecycle
@@ -37,8 +38,10 @@
 - **Lazy Init**: `server.py` uses `get_manager()` for lazy initialization to avoid creating empty tmux sessions on server startup.
 
 ### File Operations
-- **Method**: Uses `cat` and `tee` over the existing PTY.
-- **Reliability**: Uses unique markers (`__MCP_EOF_<uuid>__`) and base64 encoding to handle binary data and special characters without shell escaping issues.
+- **Read Path**: `read_remote_file` prefers a direct SSH exec for full-file reads and falls back to `cat` over the existing PTY only when necessary.
+- **Fallback Bound**: PTY fallback is intentionally bounded via `fallback_lines` to avoid dumping an entire long-lived tmux history into model context.
+- **Write Path**: `write_remote_file` uses `tee` over the existing PTY with base64 encoding.
+- **Reliability**: PTY reads use unique markers (`__MCP_EOF_<uuid>__`), and writes use base64 encoding to handle special characters without fragile shell escaping.
 - **History**: Commands are prefixed with a leading space to trigger `HISTCONTROL=ignorespace` and keep capture noise out of the user's shell history.
 
 ### Testing
@@ -63,5 +66,5 @@
 
 ## Quick Start
 1. `just install`
-2. `just test` (Runs all 15+ tests)
+2. `just test` (Runs the full test suite)
 3. `mcp-ssh-tmux` (Start the server)
