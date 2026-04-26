@@ -105,3 +105,88 @@ async def test_read_file_logic(mock_tmux):
             with patch('asyncio.sleep', new_callable=AsyncMock):
                 content = await manager.read_file("win-id", "/tmp/test.txt")
                 assert content == "file content"
+
+@pytest.mark.asyncio
+async def test_read_file_prefers_direct_ssh(mock_tmux):
+    mock_instance, mock_session = mock_tmux
+    manager = TmuxSessionManager()
+    manager._window_connections["win-id"] = {
+        "host": "remote-host",
+        "user": "admin",
+        "port": "2222",
+        "identityfile": "~/.ssh/id_ed25519",
+    }
+
+    mock_window = MagicMock()
+    mock_session.windows.get.return_value = mock_window
+
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value.returncode = 0
+        mock_run.return_value.stdout = b"full file contents\n"
+
+        content = await manager.read_file("win-id", "/tmp/test.txt")
+
+        assert content == "full file contents\n"
+        mock_window.active_pane.send_keys.assert_not_called()
+        mock_run.assert_called_once()
+        ssh_cmd = mock_run.call_args.args[0]
+        assert ssh_cmd[:5] == ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5"]
+        assert "-p" in ssh_cmd
+        assert "admin@remote-host" in ssh_cmd
+        assert ssh_cmd[-1] == "cat -- /tmp/test.txt"
+
+@pytest.mark.asyncio
+async def test_read_file_falls_back_to_pane_capture(mock_tmux):
+    mock_instance, mock_session = mock_tmux
+    manager = TmuxSessionManager()
+
+    mock_window = MagicMock()
+    mock_pane = mock_window.active_pane
+    mock_session.windows.get.return_value = mock_window
+
+    with patch.object(manager, "_read_file_via_direct_ssh", return_value=None):
+        with patch("uuid.uuid4") as mock_uuid:
+            mock_uuid.return_value.hex = "MARKER_LONG_HEX"
+            expected_marker = "__MCP_EOF_MARKER_L__"
+            mock_pane.capture_pane.return_value = [
+                f"user@host:~$ cat -- /tmp/test.txt && echo {expected_marker}",
+                "file content",
+                expected_marker,
+            ]
+
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                content = await manager.read_file("win-id", "/tmp/test.txt")
+
+            assert content == "file content"
+            mock_pane.capture_pane.assert_called_with(
+                start=f"-{manager.READ_FILE_FALLBACK_HISTORY_LINES}"
+            )
+
+@pytest.mark.asyncio
+async def test_read_file_uses_custom_fallback_lines(mock_tmux):
+    mock_instance, mock_session = mock_tmux
+    manager = TmuxSessionManager()
+
+    mock_window = MagicMock()
+    mock_pane = mock_window.active_pane
+    mock_session.windows.get.return_value = mock_window
+
+    with patch.object(manager, "_read_file_via_direct_ssh", return_value=None):
+        with patch("uuid.uuid4") as mock_uuid:
+            mock_uuid.return_value.hex = "MARKER_LONG_HEX"
+            expected_marker = "__MCP_EOF_MARKER_L__"
+            mock_pane.capture_pane.return_value = [
+                f"user@host:~$ cat -- /tmp/test.txt && echo {expected_marker}",
+                "file content",
+                expected_marker,
+            ]
+
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                content = await manager.read_file(
+                    "win-id",
+                    "/tmp/test.txt",
+                    fallback_lines=500,
+                )
+
+            assert content == "file content"
+            mock_pane.capture_pane.assert_called_with(start="-500")

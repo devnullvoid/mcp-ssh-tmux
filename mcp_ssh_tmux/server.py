@@ -52,7 +52,7 @@ async def send_command(session_id: str, command: str, lines: int = 40, timeout: 
     Args:
         session_id: The ID of the session (format: user@host-<id>).
         command: The command to send.
-        lines: Number of lines to capture from the end of the screen (default 40).
+        lines: Number of lines to capture from the end of the screen and tmux scrollback (default 40).
         timeout: Max seconds to poll for command completion (default 2.0). Increase for slower commands like package installs.
     """
     try:
@@ -108,7 +108,7 @@ def get_snapshot(session_id: str, lines: int = 40) -> str:
     
     Args:
         session_id: The ID of the session (format: user@host-<id>).
-        lines: Number of lines to capture from the end of the screen (default 40).
+        lines: Number of lines to capture from the end of the screen and tmux scrollback (default 40).
     """
     return get_snapshot_with_hints(session_id, lines=lines)
 
@@ -138,13 +138,26 @@ def get_session_snapshot_resource(session_id: str) -> str:
     return get_snapshot_with_hints(session_id)
 
 @mcp.tool()
-async def read_remote_file(session_id: str, remote_path: str) -> str:
+async def read_remote_file(
+    session_id: str,
+    remote_path: str,
+    fallback_lines: int = 200,
+) -> str:
     """Read a file from the remote host using the established session.
     
-    Use this tool to efficiently read file contents instead of running 'cat' with send_command/get_snapshot.
-    This method handles large files, binary data, and special characters correctly."""
+    Prefer this over running 'cat' via send_command/get_snapshot when you want file contents.
+    send_command() and get_snapshot() only return the last N lines of visible terminal output.
+
+    read_remote_file() attempts a direct SSH file read first so agents can get the full file
+    instead of just the pane tail. If that is not possible, it falls back to reading via the
+    existing PTY. `fallback_lines` controls how much tmux history to inspect during that PTY
+    fallback (default 200). Best for text files such as configs, logs, and source code."""
     try:
-        content = await get_manager().read_file(session_id, remote_path)
+        content = await get_manager().read_file(
+            session_id,
+            remote_path,
+            fallback_lines=fallback_lines,
+        )
         return content if content else f"No content found for {remote_path} or file read timed out."
     except Exception as e:
         return f"Error reading remote file: {str(e)}"

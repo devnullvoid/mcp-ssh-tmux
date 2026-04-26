@@ -3,15 +3,19 @@ import libtmux
 import uuid
 import subprocess
 import re
+import shlex
 from typing import Optional, List, Dict, Any
 from pathlib import Path
 from .validation import CommandValidator
 
 class TmuxSessionManager:
+    READ_FILE_FALLBACK_HISTORY_LINES = 200
+
     def __init__(self, session_name: str = "mcp-ssh"):
         self.session_name = session_name
         self.server = libtmux.Server()
         self._session = None
+        self._window_connections: Dict[str, Dict[str, Optional[str]]] = {}
         self.command_validator = CommandValidator()
 
     @property
@@ -69,6 +73,12 @@ class TmuxSessionManager:
             ssh_cmd += f" {resolved_host}"
 
         new_win = self.session.new_window(window_name=window_id, attach=False, window_shell=ssh_cmd)
+        self._window_connections[window_id] = {
+            "host": resolved_host,
+            "user": resolved_user,
+            "port": str(resolved_port) if resolved_port else None,
+            "identityfile": resolved_key,
+        }
         
         # Set a standard large size (120x40)
         try:
@@ -129,6 +139,73 @@ class TmuxSessionManager:
         raw_text = "\n".join(raw_lines)
         return self._strip_ansi(raw_text)
 
+    def _get_connection_info(self, window_id: str) -> Dict[str, Optional[str]]:
+        """Return the resolved SSH connection info for a window."""
+        connection = self._window_connections.get(window_id)
+        if connection:
+            return connection
+
+        window = self.session.windows.get(window_name=window_id, default=None)
+        if not window:
+            raise ValueError(f"Window {window_id} not found")
+
+        # Best-effort fallback for sessions restored from an existing tmux server.
+        window_name = window.window_name
+        host_part = window_name.rsplit("-", 1)[0]
+        if "@" in host_part:
+            user, host = host_part.split("@", 1)
+        else:
+            user, host = None, host_part
+
+        connection = {
+            "host": host,
+            "user": user,
+            "port": None,
+            "identityfile": None,
+        }
+        self._window_connections[window_id] = connection
+        return connection
+
+    def _build_ssh_command(self, window_id: str) -> List[str]:
+        """Build a direct SSH command for out-of-band file transfer attempts."""
+        connection = self._get_connection_info(window_id)
+        host = connection.get("host")
+        if not host:
+            raise ValueError(f"Missing host info for window {window_id}")
+
+        cmd = [
+            "ssh",
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            "ConnectTimeout=5",
+        ]
+        port = connection.get("port")
+        if port and port != "22":
+            cmd.extend(["-p", port])
+
+        identityfile = connection.get("identityfile")
+        if identityfile and identityfile != "~/.ssh/id_rsa":
+            cmd.extend(["-i", identityfile])
+
+        user = connection.get("user")
+        cmd.append(f"{user}@{host}" if user else host)
+        return cmd
+
+    def _read_file_via_direct_ssh(self, window_id: str, remote_path: str) -> Optional[str]:
+        """Try to read the remote file via a fresh SSH exec instead of pane capture."""
+        cmd = self._build_ssh_command(window_id)
+        cmd.append(f"cat -- {shlex.quote(remote_path)}")
+
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            return None
+        return result.stdout.decode("utf-8", errors="replace")
+
     def send_keys(self, window_id: str, keys: str, literal: bool = False):
         """Send keys to the tmux window after validation.
         
@@ -154,15 +231,26 @@ class TmuxSessionManager:
         else:
             pane.send_keys(keys, enter=True, literal=False)
 
-    async def read_file(self, window_id: str, remote_path: str) -> str:
-        """Read a remote file using cat over the tmux session."""
+    async def read_file(
+        self,
+        window_id: str,
+        remote_path: str,
+        fallback_lines: Optional[int] = None,
+    ) -> str:
+        """Read a remote text file, preferring a direct SSH exec over pane capture."""
         window = self.session.windows.get(window_name=window_id, default=None)
         if not window:
             raise ValueError(f"Window {window_id} not found")
-        
+
+        direct_content = self._read_file_via_direct_ssh(window_id, remote_path)
+        if direct_content is not None:
+            return direct_content
+
         pane = window.active_pane
         marker = f"__MCP_EOF_{uuid.uuid4().hex[:8]}__"
-        cmd = f" cat {remote_path} && echo {marker}"
+        quoted_path = shlex.quote(remote_path)
+        cmd = f" cat -- {quoted_path} && echo {marker}"
+        history_lines = fallback_lines or self.READ_FILE_FALLBACK_HISTORY_LINES
         
         pane.send_keys(cmd, enter=True)
         
@@ -170,8 +258,10 @@ class TmuxSessionManager:
         max_attempts = 10
         for attempt in range(max_attempts):
             await asyncio.sleep(0.5)
-            # Use raw capture here to avoid line limits
-            snapshot = "\n".join(pane.capture_pane(start="-100"))
+            # Keep PTY fallback bounded so long-lived sessions do not dump massive scrollback.
+            snapshot = "\n".join(
+                pane.capture_pane(start=f"-{history_lines}")
+            )
             
             if marker in snapshot:
                 # Find the command line and marker line
@@ -214,6 +304,7 @@ class TmuxSessionManager:
             window = session.windows.get(window_name=window_id, default=None)
             if window:
                 window.kill()
+            self._window_connections.pop(window_id, None)
             
             # Check if any non-default windows remain
             try:

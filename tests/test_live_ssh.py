@@ -2,6 +2,7 @@ import pytest
 import time
 import os
 import subprocess
+import asyncio
 from mcp_ssh_tmux.session_manager import TmuxSessionManager
 
 # We use localhost for a "real" test if possible.
@@ -54,7 +55,7 @@ def test_live_localhost_session():
             f.write("secret data")
         
         try:
-            content = manager.read_file(window_id, test_file)
+            content = asyncio.run(manager.read_file(window_id, test_file))
             assert "secret data" in content
         finally:
             if os.path.exists(test_file):
