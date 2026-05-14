@@ -16,18 +16,21 @@ def get_manager() -> TmuxSessionManager:
 
 def get_snapshot_with_hints(session_id: str, lines: int = 40) -> str:
     """Capture snapshot and append helpful hints about the session state."""
-    snapshot = get_manager().get_snapshot(session_id, lines=lines)
-    
-    # Analyze the last few characters for a shell prompt
-    # Common prompts: $, #, >, %
+    manager = get_manager()
+    snapshot = manager.get_snapshot(session_id, lines=lines)
+
+    # Check for dead pane first — overrides other hints
+    window = manager.session.windows.get(window_name=session_id, default=None)
+    if window and manager._is_pane_dead(window.active_pane):
+        return snapshot + "\n\n[INFO: The SSH connection is closed. This is the final terminal output. Use close_session() to clean up.]"
+
     last_line = snapshot.splitlines()[-1] if snapshot.strip() else ""
-    
     hint = ""
     if re.search(r"[$#>%]\s*$", last_line):
         hint = "\n\n[INFO: A shell prompt was detected at the end of the screen. The command has likely finished.]"
     elif re.search(r"\[[Yy]/[Nn]\]|password:|passphrase:", last_line, re.IGNORECASE):
         hint = "\n\n[INFO: The session appears to be waiting for interactive input (e.g., a password or confirmation).]"
-    
+
     return snapshot + hint
 
 @mcp.tool()
@@ -114,11 +117,20 @@ def get_snapshot(session_id: str, lines: int = 40) -> str:
 
 @mcp.tool()
 def list_sessions() -> str:
-    """List all active SSH sessions."""
+    """List all SSH sessions, including dead ones (SSH connection closed but pane not yet cleaned up).
+
+    Dead sessions still have their terminal output available via get_snapshot().
+    Use close_session() to clean them up."""
     sessions = get_manager().list_windows()
     if not sessions:
         return "No active sessions."
-    return "\n".join([f"- {s['window_id']}" for s in sessions])
+    lines = []
+    for s in sessions:
+        label = f"- {s['window_id']}"
+        if s.get("dead"):
+            label += " [DEAD — SSH connection closed, use get_snapshot() then close_session()]"
+        lines.append(label)
+    return "\n".join(lines)
 
 @mcp.tool()
 def close_session(session_id: str) -> str:

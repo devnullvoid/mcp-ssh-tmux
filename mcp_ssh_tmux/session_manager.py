@@ -104,12 +104,22 @@ class TmuxSessionManager:
         
         return window_id
 
+    def _is_pane_dead(self, pane) -> bool:
+        """Return True if the pane's process has exited."""
+        try:
+            result = pane.cmd("display-message", "-p", "#{pane_dead}")
+            return result.stdout == ["1"]
+        except Exception:
+            return False
+
     def list_windows(self) -> List[Dict[str, str]]:
-        """List all active SSH windows."""
-        return [
-            {"window_id": w.window_name, "active": "unknown"}
-            for w in self.session.windows
-        ]
+        """List all SSH windows, including dead ones."""
+        windows = []
+        for w in self.session.windows:
+            pane = w.active_pane
+            dead = self._is_pane_dead(pane)
+            windows.append({"window_id": w.window_name, "dead": dead})
+        return windows
 
     def _strip_ansi(self, text: str) -> str:
         """Strip all ANSI escape sequences."""
@@ -206,6 +216,21 @@ class TmuxSessionManager:
             return None
         return result.stdout.decode("utf-8", errors="replace")
 
+    def _write_file_via_direct_ssh(self, window_id: str, remote_path: str, content: str, append: bool = False) -> bool:
+        """Try to write a file via a fresh SSH exec using tee. Returns True on success."""
+        cmd = self._build_ssh_command(window_id)
+        tee_flag = "-a " if append else ""
+        tee_cmd = f"tee {tee_flag}{shlex.quote(remote_path)} > /dev/null"
+        cmd.append(tee_cmd)
+
+        result = subprocess.run(
+            cmd,
+            input=content.encode("utf-8"),
+            capture_output=True,
+            check=False,
+        )
+        return result.returncode == 0
+
     def send_keys(self, window_id: str, keys: str, literal: bool = False):
         """Send keys to the tmux window after validation.
         
@@ -222,8 +247,14 @@ class TmuxSessionManager:
         window = self.session.windows.get(window_name=window_id, default=None)
         if not window:
             raise ValueError(f"Window {window_id} not found")
-        
+
         pane = window.active_pane
+        if self._is_pane_dead(pane):
+            raise ValueError(
+                f"Session {window_id} is no longer active (SSH connection closed). "
+                "Use get_snapshot() to read any remaining output, then close_session() to clean up."
+            )
+
         if literal:
             # Split into separate args so tmux interprets key names
             # e.g. "yes Enter" → tmux send-keys yes Enter
@@ -283,18 +314,20 @@ class TmuxSessionManager:
         return ""
 
     def write_file(self, window_id: str, remote_path: str, content: str, append: bool = False):
-        """Write content to a remote file using tee over the tmux session."""
+        """Write content to a remote file, preferring a direct SSH exec over PTY."""
         window = self.session.windows.get(window_name=window_id, default=None)
         if not window:
             raise ValueError(f"Window {window_id} not found")
-        
-        pane = window.active_pane
+
+        if self._write_file_via_direct_ssh(window_id, remote_path, content, append):
+            return
+
+        # PTY fallback: base64-encode to avoid shell quoting issues
         import base64
+        pane = window.active_pane
         encoded_content = base64.b64encode(content.encode()).decode()
-        
-        redirect = "-a" if append else ""
-        cmd = f" echo '{encoded_content}' | base64 -d | tee {redirect} {remote_path} > /dev/null"
-        
+        redirect = "-a " if append else ""
+        cmd = f" echo '{encoded_content}' | base64 -d | tee {redirect}{remote_path} > /dev/null"
         pane.send_keys(cmd, enter=True)
 
     def close_window(self, window_id: str):
