@@ -632,7 +632,7 @@ wheels = [
 
 [[package]]
 name = "mcp-ssh-tmux"
-version = "0.2.4"
+version = "0.2.6"
 source = { editable = "." }
 dependencies = [
     { name = "fastmcp" },
