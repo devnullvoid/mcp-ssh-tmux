@@ -35,7 +35,16 @@
 - **Cleanup**: 
     - The default "0" window is killed upon the first SSH connection to ensure the session can close fully when done.
     - `TmuxSessionManager.close_window` kills the entire tmux session if the last active SSH window is closed.
+    - **Dead Session Reaper**: A background task (started via FastMCP `lifespan`) automatically kills sessions that have been dead (disconnected) for >24 hours.
+    - **Manual Cleanup**: The `cleanup_dead_sessions` tool allows bulk purging of dead sessions. `TmuxSessionManager` tracks death timestamps in memory (`_dead_since`) to support age-based filtering.
 - **Lazy Init**: `server.py` uses `get_manager()` for lazy initialization to avoid creating empty tmux sessions on server startup.
+
+### Transports
+- **Default**: The server defaults to `stdio` for standard MCP pipes.
+- **Streamable HTTP**: Support for the modern MCP HTTP standard is implemented via `FastMCP`. 
+    - Setting `FASTMCP_TRANSPORT=http` (or `streamable-http`) triggers the `uvicorn`-backed server.
+    - The `run()` function in `server.py` maps these environment variables to the `mcp.run()` call.
+    - Legacy `sse` is still supported but discouraged in favor of the unified `/mcp` endpoint.
 
 ### File Operations
 - **Read Path**: `read_remote_file` prefers a direct SSH exec for full-file reads and falls back to `cat` over the existing PTY only when necessary.
@@ -60,6 +69,8 @@
 - [x] **File Transfer**: `read_remote_file` and `write_remote_file` implemented.
 - [x] **Streaming Status**: `ssh-tmux://{session_id}/snapshot` MCP resource implemented.
 - [x] **PyPI Release**: v0.1.0 published.
+- [x] **Cleanup Tools**: `cleanup_dead_sessions` and background reaper (lifespan) implemented.
+- [x] **HTTP Transport**: Support for the modern `streamable-http` transport implemented.
 - [ ] **Multi-Pane Layouts**: Add tool to split windows for side-by-side monitoring (e.g., `tail -f` in one pane, interactive shell in another).
 - [ ] **Port Forwarding**: Add tools to manage SSH tunnels via the same tmux background process.
 - [ ] **Session Re-attachment**: Improve `list_sessions` to allow re-associating with tmux windows created in previous server runs.
