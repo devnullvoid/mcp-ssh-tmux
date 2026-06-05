@@ -1,6 +1,6 @@
 [project]
 name = "mcp-ssh-tmux"
-version = "0.2.6"
+version = "0.2.7"
 description = "MCP server for persistent SSH sessions via local tmux"
 readme = "README.md"
 authors = [
@@ -40,7 +40,7 @@ pythonpath = ["."]
 testpaths = ["tests"]
 
 [project.scripts]
-mcp-ssh-tmux = "mcp_ssh_tmux.server:mcp.run"
+mcp-ssh-tmux = "mcp_ssh_tmux.server:run"
 
 [build-system]
 requires = ["hatchling"]
