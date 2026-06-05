@@ -1,10 +1,34 @@
+import os
 import re
 import asyncio
 from typing import Optional
 from fastmcp import FastMCP
+from fastmcp.server.lifespan import lifespan
 from .session_manager import TmuxSessionManager
 
-mcp = FastMCP("ssh-tmux")
+async def session_reaper():
+    """Background task to periodically clean up dead sessions."""
+    while True:
+        try:
+            # Clean up sessions dead for more than 24 hours
+            get_manager().cleanup_dead_windows(max_age_seconds=24 * 3600)
+        except Exception:
+            pass
+        await asyncio.sleep(3600) # Run every hour
+
+@lifespan
+async def app_lifespan(server):
+    # Startup: Start the background reaper
+    reaper_task = asyncio.create_task(session_reaper())
+    yield
+    # Shutdown: Stop the reaper
+    reaper_task.cancel()
+    try:
+        await reaper_task
+    except asyncio.CancelledError:
+        pass
+
+mcp = FastMCP("ssh-tmux", lifespan=app_lifespan)
 _session_manager: Optional[TmuxSessionManager] = None
 
 def get_manager() -> TmuxSessionManager:
@@ -144,6 +168,19 @@ def close_session(session_id: str) -> str:
     get_manager().close_window(session_id)
     return f"Session {session_id} closed.\n\nFinal Snapshot:\n{snapshot}"
 
+@mcp.tool()
+def cleanup_dead_sessions(max_age_seconds: Optional[int] = None) -> str:
+    """Kill all sessions where the SSH connection has closed.
+    
+    Args:
+        max_age_seconds: Optional. Only kill sessions that have been dead for at least this many seconds.
+                        If omitted, all dead sessions are killed immediately.
+    """
+    killed = get_manager().cleanup_dead_windows(max_age_seconds=max_age_seconds)
+    if not killed:
+        return "No dead sessions to cleanup."
+    return f"Cleaned up {len(killed)} dead session(s): {', '.join(killed)}"
+
 @mcp.resource("ssh-tmux://{session_id}/snapshot")
 def get_session_snapshot_resource(session_id: str) -> str:
     """Live snapshot of the terminal screen."""
@@ -186,5 +223,24 @@ def write_remote_file(session_id: str, remote_path: str, content: str, append: b
     except Exception as e:
         return f"Error writing remote file: {str(e)}"
 
+def run():
+    """Entry point for the server."""
+    transport = os.getenv("FASTMCP_TRANSPORT", "stdio")
+    port_str = os.getenv("FASTMCP_PORT", "8000")
+    try:
+        port = int(port_str)
+    except ValueError:
+        port = 8000
+    
+    # Map 'http' to the modern 'streamable-http' standard
+    if transport == "http":
+        transport = "streamable-http"
+
+    if transport in ["sse", "streamable-http"]:
+        # HTTP-based transports require a port
+        mcp.run(transport=transport, port=port)
+    else:
+        mcp.run(transport=transport)
+
 if __name__ == "__main__":
-    mcp.run()
+    run()

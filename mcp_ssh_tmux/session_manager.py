@@ -4,6 +4,7 @@ import uuid
 import subprocess
 import re
 import shlex
+import time
 from typing import Optional, List, Dict, Any
 from pathlib import Path
 from .validation import CommandValidator
@@ -16,6 +17,7 @@ class TmuxSessionManager:
         self.server = libtmux.Server()
         self._session = None
         self._window_connections: Dict[str, Dict[str, Optional[str]]] = {}
+        self._dead_since: Dict[str, float] = {}
         self.command_validator = CommandValidator()
 
     @property
@@ -112,14 +114,47 @@ class TmuxSessionManager:
         except Exception:
             return False
 
-    def list_windows(self) -> List[Dict[str, str]]:
+    def list_windows(self) -> List[Dict[str, Any]]:
         """List all SSH windows, including dead ones."""
         windows = []
+        now = time.time()
         for w in self.session.windows:
+            window_id = w.window_name
             pane = w.active_pane
             dead = self._is_pane_dead(pane)
-            windows.append({"window_id": w.window_name, "dead": dead})
+            
+            if dead:
+                if window_id not in self._dead_since:
+                    self._dead_since[window_id] = now
+            else:
+                self._dead_since.pop(window_id, None)
+                
+            windows.append({
+                "window_id": window_id, 
+                "dead": dead,
+                "dead_since": self._dead_since.get(window_id)
+            })
         return windows
+
+    def cleanup_dead_windows(self, max_age_seconds: Optional[int] = None) -> List[str]:
+        """Kill all dead windows, optionally older than max_age_seconds.
+        Returns a list of killed window IDs."""
+        killed = []
+        now = time.time()
+        # We need to list windows first to check timestamps
+        # list_windows() updates self._dead_since
+        for w in self.list_windows():
+            if w["dead"]:
+                should_kill = True
+                if max_age_seconds is not None:
+                    dead_since = w.get("dead_since")
+                    if dead_since and (now - dead_since) < max_age_seconds:
+                        should_kill = False
+                
+                if should_kill:
+                    self.close_window(w["window_id"])
+                    killed.append(w["window_id"])
+        return killed
 
     def _strip_ansi(self, text: str) -> str:
         """Strip all ANSI escape sequences."""
@@ -338,6 +373,7 @@ class TmuxSessionManager:
             if window:
                 window.kill()
             self._window_connections.pop(window_id, None)
+            self._dead_since.pop(window_id, None)
             
             # Check if any non-default windows remain
             try:

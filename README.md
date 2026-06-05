@@ -69,9 +69,26 @@ Add this to your `mcp.json` (e.g., in Claude Desktop, Cursor, or 1mcp):
 -   `read_remote_file(session_id, remote_path, fallback_lines)`: Reads a remote text file. Prefer this over `cat` via `send_command()` when you need the full file contents. `fallback_lines` controls bounded tmux-history capture if direct SSH read is unavailable.
 -   `write_remote_file(session_id, remote_path, content, append)`: Writes content to a remote file.
 -   `list_sessions()`: Lists all active SSH windows.
+-   `cleanup_dead_sessions(max_age_seconds)`: Kills all windows where the SSH connection has closed. Optionally filters by how long the session has been dead.
 -   `close_session(session_id)`: Kills the window and cleans up. **WARNING**: This terminates any running processes in the session. For long-running tasks, leave the session open and monitor with `get_snapshot()`.
 
+## Transport Modes
+
+By default, the server uses `stdio` for communication with MCP clients. You can switch to the modern **Streamable HTTP** transport using environment variables:
+
+```bash
+# Start server in HTTP mode on port 8080
+FASTMCP_TRANSPORT=http FASTMCP_PORT=8080 mcp-ssh-tmux
+```
+
+The server will be available at `http://localhost:8080/mcp`.
+
 ## Important Notes
+
+### Automatic Cleanup
+
+- **Background Reaper**: The server automatically cleans up sessions that have been dead (disconnected) for more than **24 hours**.
+- **Manual Cleanup**: Use `cleanup_dead_sessions()` to manually clear disconnected sessions at any time.
 
 ### Reading Files
 

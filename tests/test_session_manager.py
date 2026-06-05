@@ -1,4 +1,5 @@
 import pytest
+import time
 from unittest.mock import MagicMock, patch, AsyncMock
 from mcp_ssh_tmux.session_manager import TmuxSessionManager
 
@@ -74,6 +75,55 @@ def test_list_multiple_windows(mock_tmux):
     assert "user@host1-aaaa" in ids
     assert "user@host1-bbbb" in ids
     assert "admin@host2-cccc" in ids
+
+def test_cleanup_dead_windows(mock_tmux):
+    mock_instance, mock_session = mock_tmux
+    manager = TmuxSessionManager()
+    
+    # Mock one live and one dead window
+    live_win = MagicMock()
+    live_win.window_name = "live-win"
+    dead_win = MagicMock()
+    dead_win.window_name = "dead-win"
+    
+    # Mock session.windows to be a list that also has a .get method
+    windows = [live_win, dead_win]
+    mock_windows = MagicMock()
+    mock_windows.__iter__.side_effect = lambda: iter(windows)
+    
+    def mock_get(window_name=None, default=None):
+        for w in windows:
+            if w.window_name == window_name:
+                return w
+        return default
+        
+    mock_windows.get.side_effect = mock_get
+    mock_session.windows = mock_windows
+    
+    # Mock _is_pane_dead
+    with patch.object(manager, '_is_pane_dead') as mock_is_dead:
+        def side_effect(pane):
+            return pane == dead_win.active_pane
+        mock_is_dead.side_effect = side_effect
+        
+        # Initial list to establish "dead_since"
+        manager.list_windows()
+        assert "dead-win" in manager._dead_since
+        assert "live-win" not in manager._dead_since
+        
+        # Cleanup with a future max_age (should not kill)
+        future_time = time.time() + 100
+        with patch('time.time', return_value=future_time):
+            killed = manager.cleanup_dead_windows(max_age_seconds=300)
+            assert len(killed) == 0
+            
+        # Cleanup with a past max_age (should kill)
+        past_time = time.time() + 1000
+        with patch('time.time', return_value=past_time):
+            killed = manager.cleanup_dead_windows(max_age_seconds=300)
+            assert len(killed) == 1
+            assert killed[0] == "dead-win"
+            dead_win.kill.assert_called_once()
 
 @pytest.mark.asyncio
 async def test_read_file_logic(mock_tmux):
