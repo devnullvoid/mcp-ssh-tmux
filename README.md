@@ -60,6 +60,18 @@ Add this to your `mcp.json` (e.g., in Claude Desktop, Cursor, or 1mcp):
 
 *Note: If you installed via `uv tool install`, you can just use `mcp-ssh-tmux` as the command.*
 
+### Native Windows tmux compatibility
+
+On Windows, the server defaults `LIBTMUX_TMUX_FORMAT_SEPARATOR` to the ASCII
+marker `|__LIBTMUX_SEP__|` before importing libtmux. Native Windows tmux builds
+can replace libtmux's default Unicode separator (`␞`) with `?`, causing
+`list_sessions` and other operations to fail with
+`zip() argument 2 is shorter than argument 1`.
+
+An explicitly configured `LIBTMUX_TMUX_FORMAT_SEPARATOR` is preserved; use an
+ASCII marker that will not appear in tmux field values. Other platforms keep
+libtmux's default. Restart the MCP server after changing the environment.
+
 ## Tools
 
 -   `open_session(host, username, port)`: Opens a new SSH connection in a unique tmux window.
